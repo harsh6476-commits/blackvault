@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #000000;
+    --bg-secondary: #080808;
+    --bg-panel: #0C0C0C;
+    --bg-input: #101010;
+    --text-primary: #F2F2F2;
+    --text-secondary: #858585;
+    --border-color: #242424;
+    --border-hover: #414141;
+    --accent: #00D68F;
+    --danger: #E5484D;
+  }
+
+  * {
+    box-sizing: border-box;
+    border-color: var(--border-color);
+  }
+
+  html, body {
+    background-color: #000000;
+    color: #F2F2F2;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Geist", Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: #00D68F;
+    color: #000000;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #080808;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #242424;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #414141;
+  }
+}
+
+/* Restrained utility classes */
+.vault-panel {
+  background-color: #0C0C0C;
+  border: 1px solid #242424;
+}
+
+.vault-input {
+  background-color: #101010;
+  border: 1px solid #242424;
+  color: #F2F2F2;
+  transition: border-color 0.15s ease;
+}
+
+.vault-input:focus {
+  outline: none;
+  border-color: #414141;
+}
+
+.vault-btn-primary {
+  background-color: #00D68F;
+  color: #000000;
+  font-weight: 500;
+  transition: opacity 0.15s ease;
+}
+
+.vault-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.vault-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vault-btn-secondary {
+  background-color: #0C0C0C;
+  border: 1px solid #242424;
+  color: #F2F2F2;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.vault-btn-secondary:hover:not(:disabled) {
+  border-color: #414141;
+  background-color: #101010;
+}
+
+.vault-btn-danger {
+  background-color: transparent;
+  border: 1px solid #242424;
+  color: #E5484D;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.vault-btn-danger:hover:not(:disabled) {
+  border-color: #E5484D;
+  background-color: rgba(229, 72, 77, 0.05);
+}
