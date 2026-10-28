@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.vault_entries (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
+DROP TRIGGER IF EXISTS trg_vault_entries_updated_at ON public.vault_entries;
 CREATE TRIGGER trg_vault_entries_updated_at
 BEFORE UPDATE ON public.vault_entries
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS public.vault_files (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
+DROP TRIGGER IF EXISTS trg_vault_files_updated_at ON public.vault_files;
 CREATE TRIGGER trg_vault_files_updated_at
 BEFORE UPDATE ON public.vault_files
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -92,6 +94,7 @@ CREATE TABLE IF NOT EXISTS public.vault_notes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
+DROP TRIGGER IF EXISTS trg_vault_notes_updated_at ON public.vault_notes;
 CREATE TRIGGER trg_vault_notes_updated_at
 BEFORE UPDATE ON public.vault_notes
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -106,6 +109,7 @@ CREATE TABLE IF NOT EXISTS public.vault_achievements (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
+DROP TRIGGER IF EXISTS trg_vault_achievements_updated_at ON public.vault_achievements;
 CREATE TRIGGER trg_vault_achievements_updated_at
 BEFORE UPDATE ON public.vault_achievements
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -119,6 +123,7 @@ CREATE TABLE IF NOT EXISTS public.vault_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
 );
 
+DROP TRIGGER IF EXISTS trg_vault_settings_updated_at ON public.vault_settings;
 CREATE TRIGGER trg_vault_settings_updated_at
 BEFORE UPDATE ON public.vault_settings
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -135,95 +140,117 @@ ALTER TABLE public.vault_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vault_settings ENABLE ROW LEVEL SECURITY;
 
 -- Owner Profiles Policies
+DROP POLICY IF EXISTS "Owner profile viewable only by owner" ON public.owner_profiles;
 CREATE POLICY "Owner profile viewable only by owner"
   ON public.owner_profiles FOR SELECT
   USING (auth_user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Owner profile insertable only during initial owner setup" ON public.owner_profiles;
 CREATE POLICY "Owner profile insertable only during initial owner setup"
   ON public.owner_profiles FOR INSERT
   WITH CHECK (auth_user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Owner profile updateable only by owner" ON public.owner_profiles;
 CREATE POLICY "Owner profile updateable only by owner"
   ON public.owner_profiles FOR UPDATE
   USING (auth_user_id = auth.uid());
 
 -- Vault Entries Policies
+DROP POLICY IF EXISTS "Vault entries select owner only" ON public.vault_entries;
 CREATE POLICY "Vault entries select owner only"
   ON public.vault_entries FOR SELECT
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault entries insert owner only" ON public.vault_entries;
 CREATE POLICY "Vault entries insert owner only"
   ON public.vault_entries FOR INSERT
   WITH CHECK (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault entries update owner only" ON public.vault_entries;
 CREATE POLICY "Vault entries update owner only"
   ON public.vault_entries FOR UPDATE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault entries delete owner only" ON public.vault_entries;
 CREATE POLICY "Vault entries delete owner only"
   ON public.vault_entries FOR DELETE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
 -- Vault Files Policies
+DROP POLICY IF EXISTS "Vault files select owner only" ON public.vault_files;
 CREATE POLICY "Vault files select owner only"
   ON public.vault_files FOR SELECT
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault files insert owner only" ON public.vault_files;
 CREATE POLICY "Vault files insert owner only"
   ON public.vault_files FOR INSERT
   WITH CHECK (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault files update owner only" ON public.vault_files;
 CREATE POLICY "Vault files update owner only"
   ON public.vault_files FOR UPDATE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault files delete owner only" ON public.vault_files;
 CREATE POLICY "Vault files delete owner only"
   ON public.vault_files FOR DELETE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
 -- Vault Notes Policies
+DROP POLICY IF EXISTS "Vault notes select owner only" ON public.vault_notes;
 CREATE POLICY "Vault notes select owner only"
   ON public.vault_notes FOR SELECT
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault notes insert owner only" ON public.vault_notes;
 CREATE POLICY "Vault notes insert owner only"
   ON public.vault_notes FOR INSERT
   WITH CHECK (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault notes update owner only" ON public.vault_notes;
 CREATE POLICY "Vault notes update owner only"
   ON public.vault_notes FOR UPDATE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault notes delete owner only" ON public.vault_notes;
 CREATE POLICY "Vault notes delete owner only"
   ON public.vault_notes FOR DELETE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
 -- Vault Achievements Policies
+DROP POLICY IF EXISTS "Vault achievements select owner only" ON public.vault_achievements;
 CREATE POLICY "Vault achievements select owner only"
   ON public.vault_achievements FOR SELECT
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault achievements insert owner only" ON public.vault_achievements;
 CREATE POLICY "Vault achievements insert owner only"
   ON public.vault_achievements FOR INSERT
   WITH CHECK (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault achievements update owner only" ON public.vault_achievements;
 CREATE POLICY "Vault achievements update owner only"
   ON public.vault_achievements FOR UPDATE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault achievements delete owner only" ON public.vault_achievements;
 CREATE POLICY "Vault achievements delete owner only"
   ON public.vault_achievements FOR DELETE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
 -- Vault Settings Policies
+DROP POLICY IF EXISTS "Vault settings select owner only" ON public.vault_settings;
 CREATE POLICY "Vault settings select owner only"
   ON public.vault_settings FOR SELECT
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault settings insert owner only" ON public.vault_settings;
 CREATE POLICY "Vault settings insert owner only"
   ON public.vault_settings FOR INSERT
   WITH CHECK (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
 
+DROP POLICY IF EXISTS "Vault settings update owner only" ON public.vault_settings;
 CREATE POLICY "Vault settings update owner only"
   ON public.vault_settings FOR UPDATE
   USING (public.is_blackvault_owner() AND owner_id IN (SELECT id FROM public.owner_profiles WHERE auth_user_id = auth.uid()));
@@ -237,6 +264,7 @@ VALUES ('blackvault-encrypted', 'blackvault-encrypted', false, 52428800) -- 50MB
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage RLS Policies
+DROP POLICY IF EXISTS "Owner access to encrypted files bucket" ON storage.objects;
 CREATE POLICY "Owner access to encrypted files bucket"
   ON storage.objects FOR ALL
   USING (

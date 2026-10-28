@@ -24,6 +24,7 @@ interface VaultContextType {
   ownerId: string | null;
   ownerEmail: string | null;
   needsInitialSetup: boolean;
+  dbMigrationNeeded: boolean;
 
   // Unlocked in-memory decrypted records
   entries: DecryptedPasswordEntry[];
@@ -34,6 +35,7 @@ interface VaultContextType {
 
   // Actions
   unlockVault: (masterPassword: string) => Promise<boolean>;
+  loginAndUnlock: (email: string, masterPassword: string) => Promise<boolean>;
   lockVault: () => void;
   logout: () => Promise<void>;
   initializeOwner: (email: string, masterPassword: string) => Promise<void>;
@@ -71,12 +73,13 @@ const DEFAULT_SETTINGS: VaultSettings = {
 const VaultContext = createContext<VaultContextType | null>(null);
 
 export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!isConfigured); // In standalone/dev mode, auth starts verified
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!isConfigured);
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
   const [isMfaRequired, setIsMfaRequired] = useState<boolean>(false);
   const [ownerId, setOwnerId] = useState<string | null>(!isConfigured ? 'local-owner' : null);
   const [ownerEmail, setOwnerEmail] = useState<string | null>(!isConfigured ? 'owner@blackvault.local' : null);
   const [needsInitialSetup, setNeedsInitialSetup] = useState<boolean>(false);
+  const [dbMigrationNeeded, setDbMigrationNeeded] = useState<boolean>(false);
 
   // IN-MEMORY CRYPTO KEY - Never saved to localStorage, sessionStorage, or IndexedDB
   const vaultKeyRef = useRef<CryptoKey | null>(null);
@@ -174,35 +177,46 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!isConfigured) return;
 
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setIsAuthenticated(true);
-        setOwnerEmail(session.user.email || null);
-
-        // Fetch owner profile and master salt
-        const { data: profile, error } = await supabase
-          .from('owner_profiles')
-          .select('id, master_salt')
-          .eq('auth_user_id', session.user.id)
-          .maybeSingle();
-
-        if (error || !profile) {
-          // If no owner profile exists yet, user needs initial owner registration
-          setNeedsInitialSetup(true);
+      try {
+        // Check schema existence
+        const { error: schemaErr } = await supabase.from('owner_profiles').select('id').limit(1);
+        if (schemaErr && (schemaErr.code === 'PGRST205' || schemaErr.message?.includes('schema cache'))) {
+          setDbMigrationNeeded(true);
         } else {
-          setOwnerId(profile.id);
-          masterSaltRef.current = profile.master_salt;
-          setNeedsInitialSetup(false);
+          setDbMigrationNeeded(false);
         }
 
-        // Check if MFA is enrolled
-        const { data: mfaData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (mfaData && mfaData.nextLevel === 'aal2' && mfaData.currentLevel !== 'aal2') {
-          setIsMfaRequired(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setIsAuthenticated(true);
+          setOwnerEmail(session.user.email || null);
+
+          // Fetch owner profile and master salt
+          const { data: profile, error } = await supabase
+            .from('owner_profiles')
+            .select('id, master_salt')
+            .eq('auth_user_id', session.user.id)
+            .maybeSingle();
+
+          if (error || !profile) {
+            setNeedsInitialSetup(true);
+          } else {
+            setOwnerId(profile.id);
+            masterSaltRef.current = profile.master_salt;
+            setNeedsInitialSetup(false);
+          }
+
+          // Check if MFA is enrolled
+          const { data: mfaData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+          if (mfaData && mfaData.nextLevel === 'aal2' && mfaData.currentLevel !== 'aal2') {
+            setIsMfaRequired(true);
+          }
+        } else {
+          setIsAuthenticated(false);
+          setOwnerId(null);
         }
-      } else {
-        setIsAuthenticated(false);
-        setOwnerId(null);
+      } catch (err) {
+        console.warn('Auth check encounter:', err);
       }
     };
 
@@ -345,6 +359,58 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  // Login with Supabase identity and unlock vault
+  const loginAndUnlock = async (email: string, masterPassword: string): Promise<boolean> => {
+    if (!isConfigured) {
+      return await unlockVault(masterPassword);
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password: masterPassword,
+    });
+
+    if (authError || !authData.user) {
+      throw new Error(authError?.message || 'Invalid credentials');
+    }
+
+    setIsAuthenticated(true);
+    setOwnerEmail(authData.user.email || null);
+
+    // Check MFA requirements
+    const { data: mfaData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (mfaData && mfaData.nextLevel === 'aal2' && mfaData.currentLevel !== 'aal2') {
+      setIsMfaRequired(true);
+      return false;
+    }
+
+    // Fetch owner profile
+    const { data: profile, error: profileError } = await supabase
+      .from('owner_profiles')
+      .select('id, master_salt')
+      .eq('auth_user_id', authData.user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      if (profileError.code === 'PGRST205' || profileError.message?.includes('schema cache')) {
+        setDbMigrationNeeded(true);
+        throw new Error('Database tables not found. Please run the SQL migration in your Supabase SQL Editor.');
+      }
+      throw new Error(`Profile query error: ${profileError.message}`);
+    }
+
+    if (!profile) {
+      setNeedsInitialSetup(true);
+      throw new Error('No owner profile registered for this account. Click SETUP OWNER to initialize.');
+    }
+
+    setOwnerId(profile.id);
+    masterSaltRef.current = profile.master_salt;
+    setNeedsInitialSetup(false);
+
+    return await unlockVault(masterPassword);
+  };
+
   // Logout
   const logout = async () => {
     lockVault();
@@ -387,6 +453,12 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .single();
 
     if (profileError) {
+      if (profileError.code === 'PGRST205' || profileError.message?.includes('schema cache')) {
+        setDbMigrationNeeded(true);
+        throw new Error(
+          'Database tables not found. Please run the migration script in supabase/migrations/20261029000000_blackvault_schema.sql in your Supabase SQL Editor.'
+        );
+      }
       throw new Error(`Owner initialization failed: ${profileError.message}`);
     }
 
@@ -440,14 +512,10 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const key = vaultKeyRef.current;
     const currentOwnerId = ownerId || 'local-owner';
 
-    // 1. Read file as ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
-
-    // 2. Encrypt binary buffer using AES-256-GCM
     const { encryptFileBuffer } = await import('../../lib/crypto');
     const encryptedBytes = await encryptFileBuffer(arrayBuffer, key);
 
-    // 3. Encrypt metadata
     const metadataPayload: FileMetadataPayload = {
       originalFilename: file.name,
       mimeType: file.type || 'application/octet-stream',
@@ -488,7 +556,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     touchActivity();
   };
 
-  // Update File Metadata (Rename, categories, tags)
+  // Update File Metadata
   const updateFileMetadata = async (id: string, metadata: FileMetadataPayload) => {
     if (!vaultKeyRef.current) throw new Error('Vault is locked');
     const key = vaultKeyRef.current;
@@ -514,7 +582,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     touchActivity();
   };
 
-  // Download File (Download encrypted -> Decrypt in browser -> Return Blob)
+  // Download File
   const downloadVaultFile = async (file: DecryptedVaultFile): Promise<Blob> => {
     if (!vaultKeyRef.current) throw new Error('Vault is locked');
     const key = vaultKeyRef.current;
@@ -528,7 +596,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return new Blob([decryptedBuffer], { type: file.metadata.mimeType || 'application/octet-stream' });
   };
 
-  // Preview File (Generates temporary Blob URL)
+  // Preview File
   const previewVaultFile = async (file: DecryptedVaultFile): Promise<string> => {
     const blob = await downloadVaultFile(file);
     const url = URL.createObjectURL(blob);
@@ -635,12 +703,14 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ownerId,
         ownerEmail,
         needsInitialSetup,
+        dbMigrationNeeded,
         entries,
         files,
         notes,
         achievements,
         settings,
         unlockVault,
+        loginAndUnlock,
         lockVault,
         logout,
         initializeOwner,

@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useVault } from '../features/vault/VaultContext';
+import { isConfigured } from '../lib/supabase';
 
 export const UnlockPage: React.FC = () => {
-  const { unlockVault, isVaultUnlocked, needsInitialSetup, initializeOwner } = useVault();
+  const {
+    unlockVault,
+    loginAndUnlock,
+    isVaultUnlocked,
+    isAuthenticated,
+    ownerEmail,
+    needsInitialSetup,
+    initializeOwner,
+    dbMigrationNeeded,
+  } = useVault();
   const navigate = useNavigate();
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    return ownerEmail || localStorage.getItem('blackvault_cached_email') || '';
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,18 +28,24 @@ export const UnlockPage: React.FC = () => {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
-  // Initial setup view toggle
+  // Setup mode toggle
   const [isSetupMode, setIsSetupMode] = useState(needsInitialSetup);
 
+  useEffect(() => {
+    if (needsInitialSetup) {
+      setIsSetupMode(true);
+    }
+  }, [needsInitialSetup]);
+
   // Redirect if already unlocked
-  React.useEffect(() => {
+  useEffect(() => {
     if (isVaultUnlocked) {
       navigate('/dashboard');
     }
   }, [isVaultUnlocked, navigate]);
 
   // Cooldown countdown timer
-  React.useEffect(() => {
+  useEffect(() => {
     if (cooldownSeconds <= 0) return;
     const timer = setInterval(() => {
       setCooldownSeconds(prev => {
@@ -59,7 +77,16 @@ export const UnlockPage: React.FC = () => {
           setIsLoading(false);
           return;
         }
-        await initializeOwner(email, password);
+        localStorage.setItem('blackvault_cached_email', email.trim());
+        await initializeOwner(email.trim(), password);
+      } else if (isConfigured && !isAuthenticated) {
+        if (!email) {
+          setError('Owner email is required to authenticate session.');
+          setIsLoading(false);
+          return;
+        }
+        localStorage.setItem('blackvault_cached_email', email.trim());
+        await loginAndUnlock(email.trim(), password);
       } else {
         await unlockVault(password);
       }
@@ -70,41 +97,61 @@ export const UnlockPage: React.FC = () => {
       const attempts = failedAttempts + 1;
       setFailedAttempts(attempts);
 
-      // Exponential cooldown after repeated failed attempts: 3, 6, 12, 30 seconds
+      const errorMsg = err instanceof Error ? err.message : String(err);
+
       if (attempts >= 3) {
         const cooldown = attempts === 3 ? 5 : attempts === 4 ? 15 : 30;
         setCooldownSeconds(cooldown);
-        setError(`Decryption failed: Invalid master password. Cooldown applied: wait ${cooldown}s.`);
+        setError(`${errorMsg} Cooldown applied: wait ${cooldown}s.`);
       } else {
-        setError('Decryption failed: Master password invalid or vault data corrupted.');
+        setError(errorMsg);
       }
     } finally {
       setIsLoading(false);
     }
   };
 
+  const showEmailField = isSetupMode || (isConfigured && !isAuthenticated);
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#000000] p-4 text-[#F2F2F2]">
       <div className="w-full max-w-sm border border-[#242424] bg-[#0C0C0C] p-8 shadow-2xl rounded-sm">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="text-[11px] font-mono tracking-widest text-[#858585]">PROJECT BLACKVAULT</div>
           <h1 className="text-xl font-medium tracking-tight text-[#F2F2F2] mt-1">PRIVATE ACCESS</h1>
           <p className="text-xs text-[#858585] mt-1 font-mono">
-            {isSetupMode ? 'OWNER INITIALIZATION' : 'CLIENT-SIDE VAULT DECRYPTION'}
+            {isSetupMode
+              ? 'OWNER INITIALIZATION'
+              : isAuthenticated
+              ? `SESSION VERIFIED: ${ownerEmail || 'OWNER'}`
+              : 'CLIENT-SIDE VAULT DECRYPTION'}
           </p>
         </div>
 
+        {/* Database Migration Alert */}
+        {dbMigrationNeeded && (
+          <div className="mb-5 p-3 bg-[#101010] border border-[#E5484D] text-[#E5484D] text-xs font-mono space-y-1.5">
+            <div className="font-bold">DATABASE MIGRATION REQUIRED</div>
+            <div className="text-[#858585] text-[11px] leading-relaxed">
+              Tables not found in Supabase. Open your Supabase SQL Editor and run the script in:
+            </div>
+            <div className="text-[10px] text-[#F2F2F2] break-all bg-[#080808] p-1.5 border border-[#242424]">
+              supabase/migrations/20261029000000_blackvault_schema.sql
+            </div>
+          </div>
+        )}
+
         {/* Error / Cooldown Alert */}
         {error && (
-          <div className="mb-6 p-3 bg-[#101010] border border-[#E5484D] text-[#E5484D] text-xs font-mono">
+          <div className="mb-5 p-3 bg-[#101010] border border-[#E5484D] text-[#E5484D] text-xs font-mono break-words">
             {error}
           </div>
         )}
 
         {/* Unlock / Setup Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {isSetupMode && (
+          {showEmailField && (
             <div>
               <label className="block text-xs font-mono text-[#858585] mb-2 tracking-wider">
                 OWNER EMAIL
