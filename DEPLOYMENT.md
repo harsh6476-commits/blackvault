@@ -21,7 +21,30 @@ This document outlines how to deploy BLACKVAULT to production using free-tier mo
 
 ## 2. Deploying Frontend
 
-### Option A: Vercel
+### Option A: Render (Recommended Free Static Site)
+
+Render provides free static hosting with automated HTTPS and continuous deployment.
+
+1. Push your repository to GitHub or GitLab.
+2. Log into [Render Dashboard](https://dashboard.render.com).
+3. Click **New +** -> **Static Site**.
+4. Connect your `BlackVault` repository.
+5. Fill in the settings:
+   - **Name:** `blackvault` (or your preferred name)
+   - **Branch:** `master` (or `main`)
+   - **Build Command:** `npm install && npm run build`
+   - **Publish Directory:** `dist`
+6. Click **Advanced** -> **Add Environment Variable**:
+   - `VITE_SUPABASE_URL` = `https://alnxxtjuehjcakesiyss.supabase.co`
+   - `VITE_SUPABASE_ANON_KEY` = your publishable key
+7. **Important for React Router:** In the Render dashboard, go to your site's **Redirects/Rewrites** tab and add a rewrite rule:
+   - **Type:** `Rewrite`
+   - **Source:** `/*`
+   - **Destination:** `/index.html`
+   *(Alternatively, this is already configured automatically via [`render.yaml`](render.yaml)).*
+8. Click **Create Static Site**.
+
+### Option B: Vercel
 
 1. Push your repository to GitHub / GitLab.
 2. Log into [Vercel](https://vercel.com) and click **Add New Project**.
